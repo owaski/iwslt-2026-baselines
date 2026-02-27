@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+dev.ipynb
+
+# Outputs
+outputs*/
+slurm_logs/
+quality_latency_tradeoff.png
+
+# Data
+data*/
+
+# CLAUDE
+.claude/
+CLAUDE.md
