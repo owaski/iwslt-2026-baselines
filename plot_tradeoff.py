@@ -1,52 +1,73 @@
+import glob
+import os
+import re
+
 import matplotlib.pyplot as plt
 import matplotlib
 
 matplotlib.rcParams.update({"font.size": 13})
 
-# Data from eval.txt files (ideal_latency = StreamLAAL)
-# Baseline: seg640, seg960, seg1280
-baseline_laal = [2.202, 3.162, 4.191]
-baseline_bleu = [45.16, 46.95, 48.07]
-baseline_comet = [72.41, 76.28, 77.50]
 
-# Abstract: seg640, seg960, seg1280
-abstract_laal = [2.151, 3.113, 4.139]
-abstract_bleu = [44.86, 47.87, 48.44]
-abstract_comet = [73.18, 76.95, 78.05]
+def parse_eval(path):
+    """Parse an eval.txt file, return (ideal_latency, bleu, comet)."""
+    text = open(path).read()
+    laal = float(re.search(r"ideal_latency=([\d.]+)", text).group(1))
+    bleu = float(re.search(r"sacrebleu score: ([\d.]+)", text).group(1))
+    comet = float(re.search(r"comet score: ([\d.]+)", text).group(1)) * 100
+    return laal, bleu, comet
 
-chunk_sizes = ["0.64", "0.96", "1.28"]
 
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+# Discover all eval.txt files and group by (lang, approach)
+lang_names = {"zh": "En→Zh", "de": "En→De", "it": "En→It"}
+results = {}  # (lang_code, approach) -> sorted list of (laal, bleu, comet, seg)
+
+for path in sorted(glob.glob("outputs/en-*/*/seg*_mss5.0_h0/eval.txt")):
+    parts = path.split(os.sep)
+    lang_code = parts[1].split("-")[1]  # en-zh -> zh
+    approach = parts[2]                  # baseline or with-context
+    seg = int(re.search(r"seg(\d+)", parts[3]).group(1))
+    laal, bleu, comet = parse_eval(path)
+    key = (lang_code, approach)
+    results.setdefault(key, []).append((laal, bleu, comet, seg))
+
+# Sort each group by segment size (latency)
+for key in results:
+    results[key].sort(key=lambda x: x[3])
+
+# Get unique language codes in order
+lang_codes = sorted(set(k[0] for k in results))
+n_langs = len(lang_codes)
+
+fig, axes = plt.subplots(1, n_langs, figsize=(6 * n_langs, 5), squeeze=False)
 
 marker_kw = dict(markersize=8, linewidth=2)
+styles = {
+    "baseline": ("o-", "#2196F3", "Baseline"),
+    "with-context": ("s-", "#FF5722", "+ Context"),
+}
 
-# BLEU subplot
-ax1.plot(baseline_laal, baseline_bleu, "o-", color="#2196F3", label="Baseline", **marker_kw)
-ax1.plot(abstract_laal, abstract_bleu, "s-", color="#FF5722", label="+ Abstract", **marker_kw)
-for i, cs in enumerate(chunk_sizes):
-    ax1.annotate(f"{cs}s", (baseline_laal[i], baseline_bleu[i]),
-                 textcoords="offset points", xytext=(8, -12), fontsize=10, color="#2196F3")
-    ax1.annotate(f"{cs}s", (abstract_laal[i], abstract_bleu[i]),
-                 textcoords="offset points", xytext=(8, 6), fontsize=10, color="#FF5722")
-ax1.set_xlabel("StreamLAAL (s)")
-ax1.set_ylabel("BLEU")
-ax1.set_title("Quality-Latency Tradeoff: BLEU")
-ax1.legend()
-ax1.grid(True, alpha=0.3)
+for col, lang in enumerate(lang_codes):
+    ax = axes[0, col]
+    for approach, (fmt, color, label) in styles.items():
+        key = (lang, approach)
+        if key not in results:
+            continue
+        data = results[key]
+        laals = [d[0] for d in data]
+        comets = [d[2] for d in data]
+        segs = [d[3] for d in data]
+        ax.plot(laals, comets, fmt, color=color, label=label, **marker_kw)
+        for i, seg in enumerate(segs):
+            offset_y = 6 if approach == "with-context" else -12
+            ax.annotate(f"{seg/1000:.2f}s", (laals[i], comets[i]),
+                        textcoords="offset points", xytext=(8, offset_y),
+                        fontsize=10, color=color)
 
-# COMET subplot
-ax2.plot(baseline_laal, baseline_comet, "o-", color="#2196F3", label="Baseline", **marker_kw)
-ax2.plot(abstract_laal, abstract_comet, "s-", color="#FF5722", label="+ Abstract", **marker_kw)
-for i, cs in enumerate(chunk_sizes):
-    ax2.annotate(f"{cs}s", (baseline_laal[i], baseline_comet[i]),
-                 textcoords="offset points", xytext=(8, -12), fontsize=10, color="#2196F3")
-    ax2.annotate(f"{cs}s", (abstract_laal[i], abstract_comet[i]),
-                 textcoords="offset points", xytext=(8, 6), fontsize=10, color="#FF5722")
-ax2.set_xlabel("StreamLAAL (s)")
-ax2.set_ylabel("COMET")
-ax2.set_title("Quality-Latency Tradeoff: COMET")
-ax2.legend()
-ax2.grid(True, alpha=0.3)
+    ax.set_xlabel("StreamLAAL (s)")
+    ax.set_ylabel("COMET")
+    ax.set_title(f"Quality-Latency: {lang_names.get(lang, lang)}")
+    ax.legend()
+    ax.grid(True, alpha=0.3)
 
 fig.tight_layout()
 fig.savefig("quality_latency_tradeoff.png", dpi=150, bbox_inches="tight")

@@ -4,21 +4,26 @@ Baseline system for the [IWSLT 2026 Simultaneous Translation Track](https://iwsl
 
 This system implements a cascade-based streaming pipeline: **ASR** (Qwen3-ASR-1.7B) → **Translation** (Qwen3-4B-Instruct-2507), with optional context from paper. It evaluates quality-latency tradeoffs for English → Chinese / German / Italian.
 
+Tested on the MCIF dataset, providing additional context consistently improves translation quality across all language pairs and latencies compared to the baseline.
+
+![Quality-Latency Tradeoff](quality_latency_tradeoff.png)
+
 ## Environment Setup
 
 Two conda environments are needed (separate due to dependency conflicts between inference and evaluation).
 
 ```bash
 # Inference environment
-conda create -y -n iwslt2026 python=3.12
-conda activate iwslt2026
+conda create -y -n inference python=3.12
+conda activate inference
 pip install uv
 uv pip install qwen-asr[vllm] simulstream simuleval pymupdf-layout pymupdf4llm jupyter nvitop pycryptodome mweralign
 
 # Evaluation environment
-conda create -y -n simulstream_eval python=3.12
-conda activate simulstream_eval
+conda create -y -n evaluation python=3.12
+conda activate evaluation
 pip install uv
+# if you encounter evaluation error for CJK languages, try install simulstream from source
 uv pip install simulstream[eval] setuptools==80.10.2
 ```
 
@@ -35,7 +40,7 @@ PDFs → extract_abstract.py → ner_llm.py → infer_{baseline,abstract}.sh →
 Extract title, authors, and abstract text from each paper PDF.
 
 ```bash
-conda activate iwslt2026
+conda activate inference
 python extract_abstract.py data/pdf_paths.txt -o data/abstract_results.json
 ```
 
@@ -47,7 +52,7 @@ python extract_abstract.py data/pdf_paths.txt -o data/abstract_results.json
 Use LLM-based majority voting to extract named entities from the abstracts. Samples N times per paper and keeps entities appearing in at least k samples for robustness.
 
 ```bash
-conda activate iwslt2026
+conda activate inference
 python ner_llm.py data/abstract_results.json -n 16 -k 8 -o data/ner_llm_results.json
 ```
 
@@ -58,13 +63,16 @@ python ner_llm.py data/abstract_results.json -n 16 -k 8 -o data/ner_llm_results.
 
 ### Step 3: Run Simultaneous Translation Inference
 
-The inference scripts generate a `speech_processor.yaml` config and run `simulstream_inference`. You can run them directly or via SLURM.
-
-**Direct (without SLURM):**
+The inference scripts generate a `speech_processor.yaml` config and run `simulstream_inference`.
 
 ```bash
-conda activate iwslt2026
+conda activate inference
 export PYTHONPATH="$(pwd):${PYTHONPATH:-}"
+
+# each line is a relative wav file path
+# e.g. audio/OiqEWDVtWk.wav
+# if the file is under mcif-long-trans/
+WAV_LIST_FILE=/path/to/wav_list
 
 # === Configure these variables ===
 TGT_LANG=Chinese           # Chinese, German, or Italian
@@ -73,14 +81,13 @@ LATENCY_UNIT=char          # char for zh, word for de/it
 SACREBLEU_TOKENIZER=zh     # zh for zh, 13a for de/it
 SEGMENT_SIZE=960           # 640, 960, or 1280 (ms), or other values
 APPROACH=with-context      # baseline or with-context
+NER_RESULTS_PATH=data/ner_llm_results.json # NER JSON for with-context approach, null for baseline
 
-WAV_LIST_FILE=/path/to/wav_list
 SPEECH_CHUNK_SIZE=$(awk "BEGIN { printf \"%.3f\", ${SEGMENT_SIZE}/1000 }")
 OUT_DIR=outputs/en-${TGT_LANG_CODE}/${APPROACH}/seg${SEGMENT_SIZE}_mss5.0_h0
 mkdir -p "$OUT_DIR"
 
-NER_RESULTS_PATH=data/ner_llm_results.json # NER JSON for with-context approach, null for baseline
-
+# write the config to a speech processor file
 cat > "${OUT_DIR}/speech_processor.yaml" <<EOF
 type: "agent_simulstream.CascadeSpeechProcessor"
 speech_chunk_size: ${SPEECH_CHUNK_SIZE}
@@ -94,8 +101,6 @@ min_start_seconds: 5.0
 max_history_utterances: 0
 max_new_tokens: 100
 temperature: 0.0
-top_p: 0.8
-top_k: 20
 repetition_penalty: 1.05
 abstract_results_path: null
 ner_results_path: ${NER_RESULTS_PATH}
@@ -108,18 +113,6 @@ PYTHONUNBUFFERED=1 uv run simulstream_inference \
     --tgt-lang "${TGT_LANG}" \
     --metrics-log-file "${OUT_DIR}/metrics.jsonl"
 ```
-
-**With SLURM:**
-
-```bash
-# Baseline (no additional context)
-sbatch infer_baseline.sh zh    # language: zh, de, or it
-
-# With additional context (NER entities injected)
-sbatch infer_with_context.sh zh
-```
-
-Each SLURM job runs as an array over three chunk sizes (640ms, 960ms, 1280ms) and automatically calls `eval.sh` after inference completes.
 
 **Output structure:**
 
@@ -139,7 +132,7 @@ Evaluation runs in the `simulstream_eval` conda environment and computes:
 - **Stats** — normalized erasure, real-time factor
 
 ```bash
-conda activate simulstream_eval
+conda activate evaluation
 
 RUN_DIR=outputs/en-zh/baseline/seg960_mss5.0_h0
 REFERENCE_FILE=/path/to/reference.txt
@@ -209,6 +202,8 @@ The core streaming processor is `CascadeSpeechProcessor` in [agent_simulstream.p
 2. **Translation**: Translates ASR output using Qwen3-4B-Instruct-2507 with [local agreement policy](https://www.isca-archive.org/interspeech_2020/liu20s_interspeech.pdf).
 
 Key configuration knobs in `speech_processor.yaml`:
+
 - `speech_chunk_size` — chunk duration in seconds (controls latency-quality tradeoff)
 - `min_start_seconds` — audio buffer before first translation attempt
 - `ner_results_path` — path to NER JSON for additional context injection (`null` for baseline)
+

@@ -3,6 +3,7 @@ import logging
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import List
+import string
 
 import numpy as np
 import torch
@@ -24,16 +25,16 @@ def longest_common_prefix(s1: str, s2: str) -> str:
             return s1[:i]
     return s1[: min(len(s1), len(s2))]
 
+def remove_punctuation(text: str) -> str:
+    return text.translate(str.maketrans('', '', string.punctuation))
 
 def find_end_time(time_stamps, position: int, text: str) -> float:
     # Find the largest timestamp whose word position is <= position.
-    text_no_punct = (text[:position] + text[position + 1:]).strip()
-    if len(time_stamps) != len(text_no_punct.split()):
+    if len(time_stamps) != len(remove_punctuation(text).split()):
         print(f"number of time stamps and words in text do not match\ntime_stamps: {time_stamps}\ntext: {text.split()}")
         return None
-    n_words_right = len(text[position + 1:].strip().split())
+    n_words_right = len(remove_punctuation(text[position + 1:]).strip().split())
     return time_stamps[-n_words_right - 1].end_time
-
 
 @dataclass
 class CascadeState:
@@ -175,7 +176,10 @@ class CascadeSpeechProcessor(SpeechProcessor):
 
     @staticmethod
     def _n_utterances(text: str) -> int:
-        return text.count(".") + text.count("!") + text.count("?")
+        n_utt = text.count(". ") + text.count("! ") + text.count("? ")
+        if text.endswith((".", "!", "?")):
+            n_utt += 1
+        return n_utt
 
     def _transcribe_audio(self, state: CascadeState):
         audio = np.array(state.source[state.utt_timestamps[-1-self.max_history_utterances]:])
@@ -205,10 +209,12 @@ class CascadeSpeechProcessor(SpeechProcessor):
         asr_segment = longest_common_prefix(state.asr_hypotheses[-2], state.asr_hypotheses[-1])
         if self._n_utterances(asr_segment) >= 1:
             rightest_punct_idx = max(
-                asr_segment.rfind("."),
-                asr_segment.rfind("!"),
-                asr_segment.rfind("?"),
+                asr_segment.rfind(". "),
+                asr_segment.rfind("! "),
+                asr_segment.rfind("? "),
             )
+            if rightest_punct_idx == -1 and asr_segment.endswith((".", "!", "?")):
+                rightest_punct_idx = len(asr_segment) - 1
             find_end_time_result = find_end_time(asr_outputs[0].time_stamps, rightest_punct_idx, asr_hypo)
             if find_end_time_result is None:
                 return None, False
@@ -373,6 +379,7 @@ Return only the translated text without any additional explanation.{context_prom
         if len(self._state.source) > 0:
             asr_segment, utt_finished = self._transcribe_audio(self._state)
             if asr_segment is None:
+                self._state.speech_id += 1
                 return IncrementalOutput([], "", [], "")
             translation = self._translate_segment(self._state, asr_segment, utt_finished)
 
