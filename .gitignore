@@ -18,6 +18,3 @@ data*/
 # CLAUDE
 .claude/
 CLAUDE.md
-
-# slurm scripts
-infer*.sh

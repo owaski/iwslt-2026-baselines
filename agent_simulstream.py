@@ -197,10 +197,10 @@ class CascadeSpeechProcessor(SpeechProcessor):
             return_time_stamps=True,
         )
 
-        print(f"asr_hypo: {asr_outputs[0].text}")
+        # print(f"asr_hypo: {asr_outputs[0].text}")
         if asr_outputs[0].time_stamps is not None and \
             asr_outputs[0].time_stamps[-1].end_time > len(audio) / SAMPLE_RATE:
-            print(f"skipping because ASR output time stamp is longer than audio length: {asr_outputs[0].time_stamps[-1].end_time} > {len(audio) / SAMPLE_RATE}")
+            # print(f"skipping because ASR output time stamp is longer than audio length: {asr_outputs[0].time_stamps[-1].end_time} > {len(audio) / SAMPLE_RATE}")
             return None, False
         
         asr_hypo = asr_outputs[0].text

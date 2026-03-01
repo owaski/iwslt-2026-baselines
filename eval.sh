@@ -1,10 +1,7 @@
-#!/usr/bin/env bash
-
-# RUN_DIR=outputs/en-de/baseline/seg640_mss5.0_h0/ REFERENCE_FILE=/data/user_data/siqiouya/datasets/acl_6060/dev/text/txt/ACL.6060.dev.en-xx.de.txt LATENCY_UNIT=word SACREBLEU_TOKENIZER=13a bash eval.sh
-
 set -euo pipefail
 
-source /home/siqiouya/miniconda3/bin/activate simulstream_eval
+eval "$(conda shell.bash hook)"
+conda activate evaluation
 
 # Override RUN_DIR to evaluate a different experiment directory.
 RUN_DIR="${RUN_DIR:-/home/siqiouya/code/iwslt_2026/outputs/baseline/seg960_mss5.0_h0}"
