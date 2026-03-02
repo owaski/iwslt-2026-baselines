@@ -74,15 +74,6 @@ SEGMENT_SIZE=960 \
 APPROACH=with-context \
 NER_RESULTS_PATH=data/ner_llm_results.json \
 bash infer.sh
-
-WAV_LIST_FILE=/data/group_data/li_lab/siqiouya/datasets/mcif-long-trans/mcif.source.simulstream \
-TGT_LANG=Chinese \
-TGT_LANG_CODE=zh \
-LATENCY_UNIT=char \
-SEGMENT_SIZE=640 \
-APPROACH=with-context \
-NER_RESULTS_PATH=data/ner_llm_results.json \
-bash infer.sh
 ```
 
 **Output structure:**
