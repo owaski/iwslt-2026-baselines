@@ -24,7 +24,7 @@ conda create -y -n evaluation python=3.12
 conda activate evaluation
 pip install uv
 # if you encounter evaluation error for CJK languages, try install simulstream from source
-uv pip install simulstream[eval] setuptools==80.10.2
+uv pip install simulstream[eval] OmniSTEval setuptools==80.10.2
 ```
 
 ## Pipeline
@@ -95,6 +95,7 @@ TRANSCRIPT_FILE=/path/to/source_transcript.txt \
 AUDIO_DEFINITION=/path/to/audio-segments.yaml \
 LATENCY_UNIT=char \
 SACREBLEU_TOKENIZER=zh \
+MOSES_TOKENIZER=zh \
 bash eval.sh
 ```
 

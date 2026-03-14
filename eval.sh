@@ -13,6 +13,7 @@ TRANSCRIPT_FILE="${TRANSCRIPT_FILE:-/data/group_data/li_lab/siqiouya/datasets/mc
 AUDIO_DEFINITION="${AUDIO_DEFINITION:-/data/group_data/li_lab/siqiouya/datasets/mcif-long-trans/audio-segments.yaml}"
 LATENCY_UNIT="${LATENCY_UNIT:-char}"
 SACREBLEU_TOKENIZER="${SACREBLEU_TOKENIZER:-zh}"
+MOSES_TOKENIZER="${MOSES_TOKENIZER:-zh}"
 
 if [[ ! -f "$EVAL_CONFIG" ]]; then
     echo "Missing eval config: $EVAL_CONFIG"
@@ -32,36 +33,21 @@ echo "Writing eval output to: $EVAL_OUT"
 
 exec > >(tee "$EVAL_OUT")
 
-PYTHONUNBUFFERED=1 uv run simulstream_score_latency \
-    --scorer stream_laal \
-    --eval-config "$EVAL_CONFIG" \
-    --log-file "$LOG_FILE" \
-    --reference "$REFERENCE_FILE" \
-    --audio-definition "$AUDIO_DEFINITION" \
-    --latency-unit "$LATENCY_UNIT"
+CHAR_LEVEL_FLAG=""
+if [[ "$LATENCY_UNIT" == "char" ]]; then
+    CHAR_LEVEL_FLAG="--char_level"
+fi
 
-PYTHONUNBUFFERED=1 uv run simulstream_score_quality \
-    --scorer sacrebleu \
-    --tokenizer "$SACREBLEU_TOKENIZER" \
-    --eval-config "$EVAL_CONFIG" \
-    --log-file "$LOG_FILE" \
-    --references "$REFERENCE_FILE" \
-    --transcripts "$TRANSCRIPT_FILE" \
-    --audio-definition "$AUDIO_DEFINITION" \
-    --latency-unit "$LATENCY_UNIT"
-
-PYTHONUNBUFFERED=1 uv run simulstream_score_quality \
-    --scorer comet \
-    --model Unbabel/XCOMET-XL \
-    --batch-size 8 \
-    --eval-config "$EVAL_CONFIG" \
-    --log-file "$LOG_FILE" \
-    --references "$REFERENCE_FILE" \
-    --transcripts "$TRANSCRIPT_FILE" \
-    --audio-definition "$AUDIO_DEFINITION" \
-    --latency-unit "$LATENCY_UNIT"
-
-PYTHONUNBUFFERED=1 uv run simulstream_stats \
-    --eval-config "$EVAL_CONFIG" \
-    --log-file "$LOG_FILE" \
-    --latency-unit "$LATENCY_UNIT"
+omnisteval longform \
+  --speech_segmentation "$AUDIO_DEFINITION" \
+  --source_sentences_file "$TRANSCRIPT_FILE" \
+  --ref_sentences_file "$REFERENCE_FILE" \
+  --hypothesis_file "$LOG_FILE" \
+  --simulstream_config_file "$EVAL_CONFIG" \
+  --hypothesis_format simulstream \
+  --comet \
+  --comet_model Unbabel/XCOMET-XL \
+  --lang "${MOSES_TOKENIZER}" \
+  $CHAR_LEVEL_FLAG \
+  --bleu_tokenizer "$SACREBLEU_TOKENIZER" \
+  --output_folder "$RUN_DIR/segmentation_output"

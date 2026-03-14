@@ -9,12 +9,12 @@ matplotlib.rcParams.update({"font.size": 13})
 
 
 def parse_eval(path):
-    """Parse an eval.txt file, return (ideal_latency, bleu, comet)."""
+    """Parse an eval.txt file, return (longyaal_cu, bleu, comet)."""
     text = open(path).read()
-    laal = float(re.search(r"ideal_latency=([\d.]+)", text).group(1))
-    bleu = float(re.search(r"sacrebleu score: ([\d.]+)", text).group(1))
-    comet = float(re.search(r"comet score: ([\d.]+)", text).group(1)) * 100
-    return laal, bleu, comet
+    longyaal = float(re.search(r"^\s+LongYAAL \(CU\)\s+([\d.]+)", text, re.MULTILINE).group(1))
+    bleu = float(re.search(r"^\s+BLEU\s+([\d.]+)", text, re.MULTILINE).group(1))
+    comet = float(re.search(r"^\s+COMET\s+([\d.]+)", text, re.MULTILINE).group(1)) * 100
+    return longyaal, bleu, comet
 
 
 # Discover all eval.txt files and group by (lang, approach)
@@ -63,8 +63,8 @@ for col, lang in enumerate(lang_codes):
                         textcoords="offset points", xytext=(8, offset_y),
                         fontsize=10, color=color)
 
-    ax.set_xlabel("StreamLAAL (s)")
-    ax.set_ylabel("COMET")
+    ax.set_xlabel("LongYAAL (CU)")
+    ax.set_ylabel("XCOMET-XL")
     ax.set_title(f"Quality-Latency: {lang_names.get(lang, lang)}")
     ax.legend()
     ax.grid(True, alpha=0.3)
